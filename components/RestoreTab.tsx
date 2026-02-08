@@ -1,7 +1,9 @@
 "use client";
 
+import { useTranslation } from "@/components/language-provider";
 import type { BackupFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -20,15 +22,12 @@ import {
   Layers,
   Loader2,
   RotateCcw,
-  Settings2,
   Table,
-  Tags,
   Trash2,
   Upload,
-  Zap,
+  Zap
 } from "lucide-react";
 import * as React from "react";
-import confetti from "canvas-confetti";
 
 interface RestoreTabProps {
   backupFiles: BackupFile[];
@@ -52,6 +51,7 @@ export function RestoreTab({
   backupFiles,
   onRestoreComplete,
 }: RestoreTabProps) {
+  const { t } = useTranslation();
   const [connectionString, setConnectionString] = React.useState("");
   const [selectedBackup, setSelectedBackup] = React.useState("");
   const [cleanDatabase, setCleanDatabase] = React.useState(true);
@@ -70,6 +70,7 @@ export function RestoreTab({
   const [totalStatements, setTotalStatements] = React.useState<number>(0);
   const [copied, setCopied] = React.useState(false);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
+  const consoleContainerRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
 
   const selectedBackupData = backupFiles.find(
@@ -87,8 +88,18 @@ export function RestoreTab({
     return () => clearInterval(interval);
   }, [loading]);
 
+  // Smart auto-scroll: only scroll the container if user is near the bottom
   React.useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = consoleContainerRef.current;
+    if (!container) return;
+    
+    // Check if user is near the bottom (within 100px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    
+    // Only auto-scroll if user is near bottom - scroll container only, not the page
+    if (isNearBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [consoleLogs]);
 
   const formatTime = (seconds: number) => {
@@ -286,10 +297,10 @@ export function RestoreTab({
         </motion.div>
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
-            Restore Backup
+            {t.restore.title}
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Restore your PostgreSQL database from a backup
+            {t.restore.subtitle}
           </p>
         </div>
       </div>
@@ -299,7 +310,7 @@ export function RestoreTab({
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             <Database className="w-4 h-4 text-emerald-500" />
-            Target Database Connection
+            {t.restore.targetConnection}
           </label>
           <input
             type="text"
@@ -310,7 +321,7 @@ export function RestoreTab({
             required
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            The database where you want to restore the backup
+            {t.restore.targetHelp}
           </p>
         </div>
 
@@ -318,7 +329,7 @@ export function RestoreTab({
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             <Archive className="w-4 h-4 text-purple-500" />
-            Select Backup
+            {t.restore.selectBackup}
           </label>
           {backupFiles.length > 0 ? (
             <select
@@ -327,7 +338,7 @@ export function RestoreTab({
               className="input-field w-full px-4 py-3.5 rounded-xl text-slate-900 dark:text-white bg-white dark:bg-slate-800 cursor-pointer"
               required
             >
-              <option value="">Choose a backup file...</option>
+              <option value="">{t.restore.selectBackupPlaceholder}</option>
               {backupFiles.map((file) => (
                 <option key={file.filename} value={file.filename}>
                   {file.filename} ({(file.size / 1024).toFixed(1)} KB)
@@ -340,7 +351,7 @@ export function RestoreTab({
                 <Archive className="w-8 h-8 text-slate-400 dark:text-slate-500" />
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                No backups available. Create one in the "Create Backup" tab.
+                {t.restore.noBackups}
               </p>
             </div>
           )}
@@ -357,7 +368,7 @@ export function RestoreTab({
             >
               <h4 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-indigo-500" />
-                Backup Details
+                {t.details.title}
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
@@ -431,11 +442,10 @@ export function RestoreTab({
             <div className="flex-1">
               <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <Trash2 className="w-4 h-4 text-amber-500" />
-                Clean Database First
+                {t.restore.cleanDatabase}
               </span>
               <span className="text-xs text-slate-600 dark:text-slate-400 block mt-1">
-                Drop existing tables before restore (recommended for fresh
-                restore)
+                {t.restore.cleanDatabaseHelp}
               </span>
             </div>
           </label>
@@ -451,8 +461,7 @@ export function RestoreTab({
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-amber-800 dark:text-amber-300">
-                    <strong>Warning:</strong> This will permanently delete all
-                    existing data in the target database before restoring.
+                    {t.restore.cleanWarning}
                   </p>
                 </div>
               </motion.div>
@@ -474,12 +483,12 @@ export function RestoreTab({
           {loading ? (
             <span className="flex items-center justify-center gap-3">
               <Loader2 className="w-5 h-5 animate-spin" />
-              Restoring...
+              {t.restore.restoring}
             </span>
           ) : (
             <span className="flex items-center justify-center gap-3">
               <RotateCcw className="w-5 h-5" />
-              Restore Database
+              {t.restore.startRestore}
             </span>
           )}
         </motion.button>
@@ -583,7 +592,14 @@ export function RestoreTab({
                   {copied ? "Copied!" : "Copy"}
                 </motion.button>
               </div>
-              <div className="console-body">
+              <div 
+                ref={consoleContainerRef}
+                className="console-body"
+                onScroll={(e) => {
+                  const target = e.currentTarget;
+                  const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+                }}
+              >
                 <AnimatePresence>
                   {consoleLogs.map((log) => (
                     <motion.div

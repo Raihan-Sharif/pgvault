@@ -1,8 +1,12 @@
 "use client";
 
 import { BackupTab } from "@/components/BackupTab";
+import { Footer } from "@/components/Footer";
 import { HistoryTab } from "@/components/HistoryTab";
+import { useTranslation } from "@/components/language-provider";
+import { LanguageToggle } from "@/components/language-toggle";
 import { RestoreTab } from "@/components/RestoreTab";
+import { SvgBackground } from "@/components/SvgBackground";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { BackupFile } from "@/lib/types";
 import { AnimatePresence, motion } from "framer-motion";
@@ -17,7 +21,6 @@ import {
   RotateCcw,
   Server,
   Shield,
-  Sparkles,
   Upload,
   Zap,
 } from "lucide-react";
@@ -29,6 +32,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = React.useState<Tab>("backup");
   const [backupFiles, setBackupFiles] = React.useState<BackupFile[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const { t } = useTranslation();
 
   const fetchBackups = React.useCallback(async () => {
     try {
@@ -51,56 +55,59 @@ export default function Home() {
   const tabs = [
     {
       id: "backup" as Tab,
-      label: "Create Backup",
+      label: t.nav.backup,
       icon: Database,
-      gradient: "from-indigo-500 to-violet-600",
+      gradient: "from-cyan-500 to-teal-600 dark:from-indigo-500 dark:to-violet-600",
+      shadow: "shadow-cyan-500/25 dark:shadow-indigo-500/25",
     },
     {
       id: "restore" as Tab,
-      label: "Restore Database",
+      label: t.nav.restore,
       icon: Upload,
-      gradient: "from-emerald-500 to-teal-600",
+      gradient: "from-emerald-500 to-teal-600 dark:from-emerald-500 dark:to-teal-600",
+      shadow: "shadow-emerald-500/25",
     },
     {
       id: "history" as Tab,
-      label: "Backup History",
+      label: t.nav.history,
       icon: History,
-      gradient: "from-amber-500 to-orange-600",
+      gradient: "from-amber-500 to-orange-600 dark:from-amber-500 dark:to-orange-600",
+      shadow: "shadow-amber-500/25",
     },
   ];
 
   const features = [
     {
       icon: Layers,
-      title: "Complete Coverage",
-      description: "Full schema, data, functions & triggers backup",
+      title: t.features.completeCoverage,
+      description: t.features.completeCoverageDesc,
       gradient: "from-violet-500 to-purple-600",
       stat: "100%",
-      statLabel: "Complete",
+      statLabel: t.features.complete,
     },
     {
       icon: Zap,
-      title: "Lightning Fast",
-      description: "Streaming compression with GZIP optimization",
+      title: t.features.lightningFast,
+      description: t.features.lightningFastDesc,
       gradient: "from-amber-500 to-orange-600",
       stat: "10x",
-      statLabel: "Faster",
+      statLabel: t.features.faster,
     },
     {
       icon: Shield,
-      title: "Production Ready",
-      description: "Enterprise reliability with error recovery",
+      title: t.features.productionReady,
+      description: t.features.productionReadyDesc,
       gradient: "from-emerald-500 to-teal-600",
       stat: "99.9%",
-      statLabel: "Uptime",
+      statLabel: t.features.uptime,
     },
     {
       icon: RotateCcw,
-      title: "Instant Restore",
-      description: "One-click database recovery",
+      title: t.features.instantRestore,
+      description: t.features.instantRestoreDesc,
       gradient: "from-rose-500 to-pink-600",
       stat: "<1min",
-      statLabel: "Recovery",
+      statLabel: t.features.recovery,
     },
   ];
 
@@ -116,255 +123,266 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      {/* Main Container - Proper Responsive Padding */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+    <>
+      {/* SVG Background Decorations */}
+      <SvgBackground />
 
-        {/* Header Section */}
-        <motion.header
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 sm:mb-10 lg:mb-12"
-        >
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            {/* Brand */}
-            <div className="flex items-center gap-4">
-              <motion.div
-                whileHover={{ scale: 1.05, rotate: 3 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                className="relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl blur-xl opacity-60" />
-                <div className="relative p-3 sm:p-4 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl shadow-2xl">
-                  <Database className="w-8 h-8 sm:w-10 sm:h-10 text-white" strokeWidth={2.5} />
-                </div>
-              </motion.div>
+      <main className="relative min-h-screen">
+        {/* Main Container */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-14">
 
-              <div>
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display text-slate-900 dark:text-white">
-                  PGVault
-                </h1>
-                <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
-                  PostgreSQL Backup & Restore Platform
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="flex flex-wrap items-center gap-3">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-                className="glass px-4 py-3 rounded-xl flex items-center gap-3"
-              >
-                <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
-                  <FileArchive className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">Backups</div>
-                  <div className="text-lg font-bold text-slate-900 dark:text-white">{totalBackups}</div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="glass px-4 py-3 rounded-xl flex items-center gap-3"
-              >
-                <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
-                  <Server className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">Size</div>
-                  <div className="text-lg font-bold text-slate-900 dark:text-white">{formatBytes(totalSize)}</div>
-                </div>
-              </motion.div>
-
-              <motion.button
-                onClick={fetchBackups}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-3 glass rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <RefreshCw className={`w-5 h-5 text-slate-600 dark:text-slate-400 ${loading ? "animate-spin" : ""}`} />
-              </motion.button>
-
-              <ThemeToggle />
-            </div>
-          </div>
-        </motion.header>
-
-        {/* Main Content */}
-        <div className="space-y-6 sm:space-y-8">
-          {/* Tabs Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+          {/* Header Section */}
+          <motion.header
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="glass-ultra rounded-2xl overflow-hidden"
+            className="mb-10 sm:mb-12 lg:mb-14"
           >
-            {/* Tab Navigation */}
-            <div className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 p-2">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-
-                  return (
-                    <motion.button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`
-                        px-4 py-3 rounded-xl font-semibold text-sm sm:text-base
-                        flex items-center justify-center gap-3
-                        transition-all duration-300
-                        ${isActive
-                          ? `bg-gradient-to-r ${tab.gradient} text-white shadow-lg`
-                          : 'bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800'
-                        }
-                      `}
-                      whileHover={{ scale: isActive ? 1 : 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              {/* Brand */}
+              <div className="flex items-center gap-5">
+                <motion.div
+                  whileHover={{ scale: 1.05, rotate: 3 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                  className="relative"
+                >
+                  {/* Glow effect */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-teal-500 dark:from-indigo-500 dark:to-violet-600 rounded-2xl blur-xl opacity-50" />
+                  
+                  {/* Logo container */}
+                  <div className="relative p-4 bg-gradient-to-br from-cyan-500 to-teal-500 dark:from-indigo-500 dark:to-violet-600 rounded-2xl shadow-2xl">
+                    {/* Custom SVG Logo */}
+                    <svg
+                      className="w-10 h-10 text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
                     >
-                      <Icon className="w-5 h-5" strokeWidth={2.5} />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                      <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
-                    </motion.button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tab Content - PROPER PADDING */}
-            <div className="p-6 sm:p-8 lg:p-10 bg-white/50 dark:bg-slate-900/50">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {activeTab === "backup" && (
-                    <BackupTab
-                      onBackupComplete={() => {
-                        fetchBackups();
-                        setTimeout(() => setActiveTab("history"), 1500);
-                      }}
-                    />
-                  )}
-
-                  {activeTab === "restore" && (
-                    <RestoreTab
-                      backupFiles={backupFiles}
-                      onRestoreComplete={() => fetchBackups()}
-                    />
-                  )}
-
-                  {activeTab === "history" && (
-                    <HistoryTab
-                      backupFiles={backupFiles}
-                      onRefresh={fetchBackups}
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </motion.div>
-
-          {/* Feature Cards Grid - RESPONSIVE */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
-          >
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 + index * 0.05 }}
-                  whileHover={{ y: -4 }}
-                  className="glass-card p-6 rounded-2xl"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`p-3 bg-gradient-to-br ${feature.gradient} rounded-xl shadow-lg`}>
-                      <Icon className="w-6 h-6 text-white" strokeWidth={2.5} />
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
-                        {feature.stat}
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase">
-                        {feature.statLabel}
-                      </div>
-                    </div>
+                      <ellipse cx="12" cy="6" rx="8" ry="3" stroke="currentColor" strokeWidth="2" />
+                      <path d="M4 6v12c0 1.657 3.582 3 8 3s8-1.343 8-3V6" stroke="currentColor" strokeWidth="2" />
+                      <ellipse cx="12" cy="12" rx="8" ry="3" stroke="currentColor" strokeWidth="1.5" className="opacity-60" />
+                      <path d="M12 9v6m-3-3h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    {feature.description}
-                  </p>
                 </motion.div>
-              );
-            })}
-          </motion.div>
 
-          {/* System Status */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="glass-card p-6 rounded-2xl"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 shadow-lg">
-                  <Activity className="w-5 h-5 text-white" />
-                </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg">
-                    System Status
-                  </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    All systems operational
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display gradient-text">
+                    PGVault
+                  </h1>
+                  <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                    PostgreSQL Backup & Restore Platform
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-slate-600 dark:text-slate-400">PostgreSQL Connected</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Gauge className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <span className="text-slate-600 dark:text-slate-400">Ready</span>
-                </div>
+              {/* Quick Stats & Controls */}
+              <div className="flex flex-wrap items-center gap-3">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="glass px-5 py-3.5 rounded-xl flex items-center gap-4"
+                >
+                  <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 dark:from-indigo-500 dark:to-violet-600 shadow-lg">
+                    <FileArchive className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">{t.stats.totalBackups}</div>
+                    <div className="text-xl font-bold text-slate-900 dark:text-white">{totalBackups}</div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="glass px-5 py-3.5 rounded-xl flex items-center gap-4"
+                >
+                  <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
+                    <Server className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">{t.stats.storageUsed}</div>
+                    <div className="text-xl font-bold text-slate-900 dark:text-white">{formatBytes(totalSize)}</div>
+                  </div>
+                </motion.div>
+
+                <motion.button
+                  onClick={fetchBackups}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="p-3.5 glass rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all"
+                  aria-label="Refresh backups"
+                >
+                  <RefreshCw className={`w-5 h-5 text-slate-600 dark:text-slate-400 ${loading ? "animate-spin" : ""}`} />
+                </motion.button>
+
+                <LanguageToggle />
+                <ThemeToggle />
               </div>
             </div>
-          </motion.div>
+          </motion.header>
 
-          {/* Footer */}
-          <motion.footer
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center py-6"
-          >
-            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              Powered by Next.js, TypeScript & PostgreSQL
-            </p>
-          </motion.footer>
+          {/* Main Content */}
+          <div className="space-y-8 sm:space-y-10">
+            {/* Tabs Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-ultra overflow-hidden"
+            >
+              {/* Tab Navigation */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-200/50 dark:border-slate-700/50 p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+
+                    return (
+                      <motion.button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`
+                          px-5 py-3.5 rounded-xl font-semibold text-sm sm:text-base
+                          flex items-center justify-center gap-3
+                          transition-all duration-300
+                          ${isActive
+                            ? `bg-gradient-to-r ${tab.gradient} text-white shadow-xl ${tab.shadow}`
+                            : 'bg-white/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md'
+                          }
+                        `}
+                        whileHover={{ scale: isActive ? 1 : 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Icon className="w-5 h-5" strokeWidth={2.5} />
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-6 sm:p-8 lg:p-10">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {activeTab === "backup" && (
+                      <BackupTab
+                        onBackupComplete={() => {
+                          fetchBackups();
+                          setTimeout(() => setActiveTab("history"), 1500);
+                        }}
+                      />
+                    )}
+
+                    {activeTab === "restore" && (
+                      <RestoreTab
+                        backupFiles={backupFiles}
+                        onRestoreComplete={() => fetchBackups()}
+                      />
+                    )}
+
+                    {activeTab === "history" && (
+                      <HistoryTab
+                        backupFiles={backupFiles}
+                        onRefresh={fetchBackups}
+                      />
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </motion.div>
+
+            {/* Feature Cards Grid */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6"
+            >
+              {features.map((feature, index) => {
+                const Icon = feature.icon;
+                return (
+                  <motion.div
+                    key={feature.title}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + index * 0.05 }}
+                    whileHover={{ y: -6 }}
+                    className="glass-card p-6"
+                  >
+                    <div className="flex items-start justify-between mb-5">
+                      <div className={`p-3.5 bg-gradient-to-br ${feature.gradient} rounded-xl shadow-lg`}>
+                        <Icon className="w-6 h-6 text-white" strokeWidth={2.5} />
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">
+                          {feature.stat}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
+                          {feature.statLabel}
+                        </div>
+                      </div>
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg mb-2">
+                      {feature.title}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+
+            {/* System Status */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="glass-card p-6"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 shadow-lg">
+                    <Activity className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
+                      {t.status.systemStatus}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {t.status.allOperational}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-5">
+                  <div className="flex items-center gap-2.5 text-sm">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse" />
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">{t.status.postgresConnected}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm">
+                    <Gauge className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">{t.status.ready}</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
-      </div>
-    </main>
+
+        {/* Footer */}
+        <Footer />
+      </main>
+    </>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
+import { useTranslation } from "@/components/language-provider";
 import type { BackupMetadata } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -25,7 +27,6 @@ import {
   Zap,
 } from "lucide-react";
 import * as React from "react";
-import confetti from "canvas-confetti";
 
 interface BackupTabProps {
   onBackupComplete?: (metadata: BackupMetadata) => void;
@@ -46,6 +47,7 @@ interface ConsoleLogEntry {
 }
 
 export function BackupTab({ onBackupComplete }: BackupTabProps) {
+  const { t } = useTranslation();
   const [connectionString, setConnectionString] = React.useState("");
   const [backupName, setBackupName] = React.useState("");
   const [compress, setCompress] = React.useState(true);
@@ -67,7 +69,9 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
   const [rowsProcessed, setRowsProcessed] = React.useState<number>(0);
   const [copied, setCopied] = React.useState(false);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
+  const consoleContainerRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
+  const isUserScrolling = React.useRef(false);
 
   React.useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -80,8 +84,18 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
     return () => clearInterval(interval);
   }, [loading]);
 
+  // Smart auto-scroll: only scroll the container if user is near the bottom
   React.useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = consoleContainerRef.current;
+    if (!container) return;
+    
+    // Check if user is near the bottom (within 100px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    
+    // Only auto-scroll if user is near bottom - scroll container only, not the page
+    if (isNearBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [consoleLogs]);
 
   const formatTime = (seconds: number) => {
@@ -307,10 +321,10 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         </motion.div>
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
-            Create Backup
+            {t.backup.title}
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Securely backup your PostgreSQL database
+            {t.backup.subtitle}
           </p>
         </div>
       </div>
@@ -320,7 +334,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             <Database className="w-4 h-4 text-indigo-500" />
-            Connection String
+            {t.backup.connectionString}
           </label>
           <div className="relative">
             <input
@@ -335,7 +349,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Your connection is encrypted and never stored
+              {t.backup.connectionHelp}
             </p>
             <motion.button
               type="button"
@@ -348,12 +362,12 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
               {testing ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Testing...
+                  {t.backup.testing}
                 </>
               ) : (
                 <>
                   <TestTube2 className="w-3.5 h-3.5" />
-                  Test Connection
+                  {t.backup.testConnection}
                 </>
               )}
             </motion.button>
@@ -439,7 +453,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             <FileCode className="w-4 h-4 text-purple-500" />
-            Backup Name
+            {t.backup.backupName}
           </label>
           <input
             type="text"
@@ -455,7 +469,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <Settings2 className="w-4 h-4" />
-            Backup Options
+            {t.backup.backupOptions}
           </h3>
 
           {/* Compression Toggle */}
@@ -475,10 +489,10 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
             <div className="flex-1">
               <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <Archive className="w-4 h-4 text-indigo-500" />
-                Enable Compression
+                {t.backup.compression}
               </span>
               <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
-                GZIP compression - reduces file size by up to 90%
+                {t.backup.compressionHelp}
               </span>
             </div>
             {compress && (
@@ -487,7 +501,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
                 animate={{ scale: 1 }}
                 className="badge badge-info"
               >
-                Recommended
+                {t.backup.recommended}
               </motion.div>
             )}
           </motion.label>
@@ -512,10 +526,10 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
             <div className="flex-1">
               <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <Layers className="w-4 h-4 text-purple-500" />
-                Schema Only
+                {t.backup.schemaOnly}
               </span>
               <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
-                Backup structure only (tables, views, functions) - no data
+                {t.backup.schemaOnlyHelp}
               </span>
             </div>
           </motion.label>
@@ -540,10 +554,10 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
             <div className="flex-1">
               <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-emerald-500" />
-                Data Only
+                {t.backup.dataOnly}
               </span>
               <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
-                Backup INSERT statements only - no schema definitions
+                {t.backup.dataOnlyHelp}
               </span>
             </div>
           </motion.label>
@@ -560,12 +574,12 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
           {loading ? (
             <span className="flex items-center justify-center gap-3">
               <Loader2 className="w-5 h-5 animate-spin" />
-              Creating Backup...
+              {t.backup.backingUp}
             </span>
           ) : (
             <span className="flex items-center justify-center gap-3">
               <Database className="w-5 h-5" />
-              Create Backup
+              {t.backup.startBackup}
             </span>
           )}
         </motion.button>
@@ -669,7 +683,15 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
                   {copied ? "Copied!" : "Copy"}
                 </motion.button>
               </div>
-              <div className="console-body">
+              <div 
+                ref={consoleContainerRef}
+                className="console-body"
+                onScroll={(e) => {
+                  const target = e.currentTarget;
+                  const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+                  isUserScrolling.current = !isNearBottom;
+                }}
+              >
                 <AnimatePresence>
                   {consoleLogs.map((log) => (
                     <motion.div

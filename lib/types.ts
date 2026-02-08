@@ -53,9 +53,9 @@ export interface RestoreProgress {
 
 export interface BackupFile {
   filename: string;
-  filepath: string;
-  metadata: BackupMetadata;
-  createdAt: Date;
+  filepath?: string;
+  metadata: BackupMetadata | null;
+  createdAt: Date | string;
   size: number;
 }
 
