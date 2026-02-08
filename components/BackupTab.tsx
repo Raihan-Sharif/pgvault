@@ -8,6 +8,7 @@ import {
   Archive,
   CheckCircle2,
   Clock,
+  Copy,
   Database,
   Eye,
   FileCode,
@@ -48,6 +49,8 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
   const [connectionString, setConnectionString] = React.useState("");
   const [backupName, setBackupName] = React.useState("");
   const [compress, setCompress] = React.useState(true);
+  const [schemaOnly, setSchemaOnly] = React.useState(false);
+  const [dataOnly, setDataOnly] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [result, setResult] = React.useState<{
@@ -62,6 +65,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
   const [consoleLogs, setConsoleLogs] = React.useState<ConsoleLogEntry[]>([]);
   const [currentTable, setCurrentTable] = React.useState<string>("");
   const [rowsProcessed, setRowsProcessed] = React.useState<number>(0);
+  const [copied, setCopied] = React.useState(false);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
 
@@ -86,15 +90,29 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const copyLogsToClipboard = async () => {
+    const logsText = consoleLogs
+      .map((log) => `${log.icon} ${log.message}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(logsText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy logs:", err);
+    }
+  };
+
   const addConsoleLog = (
     type: ConsoleLogEntry["type"],
     icon: string,
     message: string,
   ) => {
     logIdRef.current += 1;
+    const uniqueId = Date.now() + logIdRef.current;
     setConsoleLogs((prev) => [
       ...prev,
-      { id: logIdRef.current, type, icon, message, timestamp: new Date() },
+      { id: uniqueId, type, icon, message, timestamp: new Date() },
     ]);
   };
 
@@ -178,6 +196,8 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
           connectionString,
           backupName,
           compress,
+          schemaOnly,
+          dataOnly,
         }),
       });
 
@@ -431,39 +451,103 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
           />
         </div>
 
-        {/* Compression Toggle */}
-        <motion.label
-          whileHover={{ scale: 1.01 }}
-          className={cn(
-            "glass-card flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all",
-            compress && "ring-2 ring-indigo-500/30 border-indigo-500/30",
-          )}
-        >
-          <input
-            type="checkbox"
-            checked={compress}
-            onChange={(e) => setCompress(e.target.checked)}
-            className="w-5 h-5 text-indigo-600 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-          />
-          <div className="flex-1">
-            <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-indigo-500" />
-              Enable Compression
-            </span>
-            <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
-              GZIP compression - reduces file size by up to 90%
-            </span>
-          </div>
-          {compress && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="badge badge-info"
-            >
-              Recommended
-            </motion.div>
-          )}
-        </motion.label>
+        {/* Backup Options */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <Settings2 className="w-4 h-4" />
+            Backup Options
+          </h3>
+
+          {/* Compression Toggle */}
+          <motion.label
+            whileHover={{ scale: 1.01 }}
+            className={cn(
+              "glass-card flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all",
+              compress && "ring-2 ring-indigo-500/30 border-indigo-500/30",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={compress}
+              onChange={(e) => setCompress(e.target.checked)}
+              className="w-5 h-5 text-indigo-600 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            />
+            <div className="flex-1">
+              <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <Archive className="w-4 h-4 text-indigo-500" />
+                Enable Compression
+              </span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
+                GZIP compression - reduces file size by up to 90%
+              </span>
+            </div>
+            {compress && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="badge badge-info"
+              >
+                Recommended
+              </motion.div>
+            )}
+          </motion.label>
+
+          {/* Schema Only */}
+          <motion.label
+            whileHover={{ scale: 1.01 }}
+            className={cn(
+              "glass-card flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all",
+              schemaOnly && "ring-2 ring-purple-500/30 border-purple-500/30",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={schemaOnly}
+              onChange={(e) => {
+                setSchemaOnly(e.target.checked);
+                if (e.target.checked) setDataOnly(false);
+              }}
+              className="w-5 h-5 text-purple-600 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            />
+            <div className="flex-1">
+              <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-500" />
+                Schema Only
+              </span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
+                Backup structure only (tables, views, functions) - no data
+              </span>
+            </div>
+          </motion.label>
+
+          {/* Data Only */}
+          <motion.label
+            whileHover={{ scale: 1.01 }}
+            className={cn(
+              "glass-card flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all",
+              dataOnly && "ring-2 ring-emerald-500/30 border-emerald-500/30",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={dataOnly}
+              onChange={(e) => {
+                setDataOnly(e.target.checked);
+                if (e.target.checked) setSchemaOnly(false);
+              }}
+              className="w-5 h-5 text-emerald-600 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            />
+            <div className="flex-1">
+              <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileCode className="w-4 h-4 text-emerald-500" />
+                Data Only
+              </span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 block mt-0.5">
+                Backup INSERT statements only - no schema definitions
+              </span>
+            </div>
+          </motion.label>
+        </div>
 
         {/* Submit Button */}
         <motion.button
@@ -563,14 +647,27 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
             {/* Console Output */}
             <div className="console-output">
               <div className="console-header">
-                <div className="console-dots">
-                  <div className="console-dot red" />
-                  <div className="console-dot yellow" />
-                  <div className="console-dot green" />
+                <div className="flex items-center gap-2">
+                  <div className="console-dots">
+                    <div className="console-dot red" />
+                    <div className="console-dot yellow" />
+                    <div className="console-dot green" />
+                  </div>
+                  <span className="text-sm text-slate-400 font-medium">
+                    Backup Progress
+                  </span>
                 </div>
-                <span className="text-sm text-slate-400 ml-2 font-medium">
-                  Backup Progress
-                </span>
+                <motion.button
+                  type="button"
+                  onClick={copyLogsToClipboard}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 transition-colors"
+                  title="Copy logs to clipboard"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copied ? "Copied!" : "Copy"}
+                </motion.button>
               </div>
               <div className="console-body">
                 <AnimatePresence>

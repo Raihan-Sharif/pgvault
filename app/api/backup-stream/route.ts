@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       try {
         const body = await request.json();
-        const { connectionString, backupName, compress } = body;
+        const { connectionString, backupName, compress, schemaOnly, dataOnly } = body;
 
         // Validate inputs
         if (!connectionString || !backupName) {
@@ -36,7 +36,11 @@ export async function POST(request: NextRequest) {
         const result = await createBackup(
           connectionString,
           backupName,
-          { compress: compress || false },
+          {
+            compress: compress || false,
+            schemaOnly: schemaOnly || false,
+            dataOnly: dataOnly || false,
+          },
           emitProgress
         );
 

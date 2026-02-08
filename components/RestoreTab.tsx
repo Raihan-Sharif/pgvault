@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Code2,
+  Copy,
   Database,
   Eye,
   FileCode,
@@ -67,6 +68,7 @@ export function RestoreTab({
   const [currentStatement, setCurrentStatement] = React.useState<string>("");
   const [statementsExecuted, setStatementsExecuted] = React.useState<number>(0);
   const [totalStatements, setTotalStatements] = React.useState<number>(0);
+  const [copied, setCopied] = React.useState(false);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
 
@@ -95,15 +97,29 @@ export function RestoreTab({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const copyLogsToClipboard = async () => {
+    const logsText = consoleLogs
+      .map((log) => `${log.icon} ${log.message}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(logsText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy logs:", err);
+    }
+  };
+
   const addConsoleLog = (
     type: ConsoleLogEntry["type"],
     icon: string,
     message: string,
   ) => {
     logIdRef.current += 1;
+    const uniqueId = Date.now() + logIdRef.current;
     setConsoleLogs((prev) => [
       ...prev,
-      { id: logIdRef.current, type, icon, message },
+      { id: uniqueId, type, icon, message },
     ]);
   };
 
@@ -545,14 +561,27 @@ export function RestoreTab({
             {/* Console Output */}
             <div className="console-output">
               <div className="console-header">
-                <div className="console-dots">
-                  <div className="console-dot red" />
-                  <div className="console-dot yellow" />
-                  <div className="console-dot green" />
+                <div className="flex items-center gap-2">
+                  <div className="console-dots">
+                    <div className="console-dot red" />
+                    <div className="console-dot yellow" />
+                    <div className="console-dot green" />
+                  </div>
+                  <span className="text-sm text-slate-400 font-medium">
+                    Restore Progress
+                  </span>
                 </div>
-                <span className="text-sm text-slate-400 ml-2 font-medium">
-                  Restore Progress
-                </span>
+                <motion.button
+                  type="button"
+                  onClick={copyLogsToClipboard}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 transition-colors"
+                  title="Copy logs to clipboard"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copied ? "Copied!" : "Copy"}
+                </motion.button>
               </div>
               <div className="console-body">
                 <AnimatePresence>
