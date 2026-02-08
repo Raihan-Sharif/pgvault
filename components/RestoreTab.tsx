@@ -72,6 +72,8 @@ export function RestoreTab({
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
   const consoleContainerRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = React.useState(false);
 
   const selectedBackupData = backupFiles.find(
     (b) => b.filename === selectedBackup,
@@ -165,6 +167,37 @@ export function RestoreTab({
       { name: "Complete", status: "pending", icon: CheckCircle2 },
     ];
     return steps;
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        if (onRestoreComplete) onRestoreComplete();
+        setTimeout(() => setSelectedBackup(data.filename), 1000);
+        addConsoleLog("success", "✅", t.restore.uploadSuccess);
+      } else {
+        addConsoleLog("error", "✗", data.message || "Upload failed");
+      }
+    } catch (error) {
+      console.error("Upload failed", error);
+      addConsoleLog("error", "✗", "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleRestore = async (e: React.FormEvent) => {
@@ -355,6 +388,43 @@ export function RestoreTab({
               </p>
             </div>
           )}
+        </div>
+
+        {/* Upload Option */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-slate-300 dark:border-slate-700" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-slate-50 dark:bg-slate-900 px-2 text-slate-500 font-medium">
+              {t.restore.orUpload}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleUpload}
+            accept=".sql,.gz"
+            className="hidden"
+          />
+          <motion.button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+          >
+            {uploading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
+            {uploading ? t.restore.uploading : t.restore.uploadBackup}
+          </motion.button>
         </div>
 
         {/* Selected Backup Info */}

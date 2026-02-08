@@ -58,7 +58,9 @@ async function createBackup(connectionString, backupName, options = {}, progress
     const databaseName = dbInfo.rows[0].current_database;
     const postgresVersion = dbInfo.rows[0].version;
 
-    const backupDir = path.join(process.cwd(), "backups");
+    // Use /tmp directory for Vercel/Serverless compatibility
+    const os = require('os');
+    const backupDir = path.join(os.tmpdir(), "pgvault-backups");
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }

@@ -2,6 +2,7 @@ import { validateConnectionString } from "@/lib/utils";
 import { restoreBackup } from "@/scripts/restore";
 import fs from "fs";
 import { NextRequest, NextResponse } from "next/server";
+import os from "os";
 import path from "path";
 
 export async function POST(request: NextRequest) {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct backup file path
-    const backupPath = path.join(process.cwd(), "backups", backupFilename);
+    const backupPath = path.join(os.tmpdir(), "pgvault-backups", backupFilename);
 
     // Check if backup file exists
     if (!fs.existsSync(backupPath)) {
