@@ -12,6 +12,7 @@ import {
   Clock,
   Copy,
   Database,
+  Download,
   Eye,
   FileCode,
   FunctionSquare,
@@ -154,8 +155,60 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         message:
           error instanceof Error ? error.message : "Connection test failed",
       });
-    } finally {
       setTesting(false);
+    }
+  };
+
+
+  const handleDirectDownload = async () => {
+    if (!backupName) {
+      setResult({ success: false, message: t.backup.backupNameRequired || "Backup name is required" });
+      return;
+    }
+    
+    // We use a separate loading state or just re-use loading but suppress progress?
+    // Let's use loading but maybe add a distinct visual state if needed.
+    // For now, re-using loading is simplest.
+    setLoading(true);
+    setResult(null);
+    
+    try {
+        const filename = backupName.endsWith('.sql') ? backupName : `${backupName}.sql`;
+        
+        const response = await fetch('/api/backup/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                connectionString,
+                backupName: filename,
+                schemaOnly,
+                dataOnly
+            })
+        });
+
+        if (!response.ok) {
+           const data = await response.json();
+           throw new Error(data.message || 'Download failed');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        addConsoleLog("success", "⬇️", t.restore.downloading + " " + filename); // reusing downloading string
+        setResult({ success: true, message: "Download started successfully." });
+
+    } catch (e: any) {
+        setResult({ success: false, message: e.message });
+        addConsoleLog("error", "✗", "Download failed: " + e.message);
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -563,26 +616,49 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
           </motion.label>
         </div>
 
-        {/* Submit Button */}
-        <motion.button
-          type="submit"
-          disabled={loading}
-          whileHover={{ scale: loading ? 1 : 1.02, y: loading ? 0 : -2 }}
-          whileTap={{ scale: loading ? 1 : 0.98 }}
-          className="btn-primary w-full py-4 rounded-xl font-bold text-base md:text-lg disabled:opacity-70"
-        >
-          {loading ? (
-            <span className="flex items-center justify-center gap-3">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              {t.backup.backingUp}
-            </span>
-          ) : (
-            <span className="flex items-center justify-center gap-3">
-              <Database className="w-5 h-5" />
-              {t.backup.startBackup}
-            </span>
-          )}
-        </motion.button>
+        {/* Action Buttons */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileHover={{ scale: loading ? 1 : 1.02, y: loading ? 0 : -2 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
+            className="btn-primary w-full py-4 rounded-xl font-bold text-base md:text-lg disabled:opacity-70 flex items-center justify-center gap-3"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {t.backup.backingUp}
+              </>
+            ) : (
+              <>
+                <Database className="w-5 h-5" />
+                {t.backup.startBackup}
+              </>
+            )}
+          </motion.button>
+
+          <motion.button
+            type="button"
+            onClick={handleDirectDownload}
+            disabled={loading}
+            whileHover={{ scale: loading ? 1 : 1.02, y: loading ? 0 : -2 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
+            className="w-full py-4 rounded-xl font-bold text-base md:text-lg disabled:opacity-70 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-3"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {t.backup.downloading}
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5" />
+                {t.backup.downloadDirect}
+              </>
+            )}
+          </motion.button>
+        </div>
       </form>
 
       {/* Console-Like Progress */}
