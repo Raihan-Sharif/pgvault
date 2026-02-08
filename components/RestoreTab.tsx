@@ -27,6 +27,7 @@ import {
   Zap,
 } from "lucide-react";
 import * as React from "react";
+import confetti from "canvas-confetti";
 
 interface RestoreTabProps {
   backupFiles: BackupFile[];
@@ -63,6 +64,9 @@ export function RestoreTab({
   const [currentProgress, setCurrentProgress] = React.useState(0);
   const [elapsedTime, setElapsedTime] = React.useState(0);
   const [consoleLogs, setConsoleLogs] = React.useState<ConsoleLogEntry[]>([]);
+  const [currentStatement, setCurrentStatement] = React.useState<string>("");
+  const [statementsExecuted, setStatementsExecuted] = React.useState<number>(0);
+  const [totalStatements, setTotalStatements] = React.useState<number>(0);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
 
@@ -103,176 +107,144 @@ export function RestoreTab({
     ]);
   };
 
-  const simulateProgress = () => {
+
+  const updateProgressStep = (stageName: string, status: "active" | "complete") => {
+    setProgress((prev) =>
+      prev.map((step) => {
+        const stepNameLower = step.name.toLowerCase();
+        const stageNameLower = stageName.toLowerCase();
+
+        if (stepNameLower.includes(stageNameLower) || stageNameLower.includes(stepNameLower)) {
+          return { ...step, status };
+        }
+        return step;
+      })
+    );
+  };
+
+  const initializeProgressSteps = () => {
     const steps: ProgressStep[] = [
-      { name: "Connect", status: "pending", icon: Database },
-      { name: "Read", status: "pending", icon: FileCode },
-      { name: "Parse", status: "pending", icon: Code2 },
-      ...(cleanDatabase
-        ? [{ name: "Clean", status: "pending" as const, icon: Trash2 }]
-        : []),
-      { name: "Extensions", status: "pending", icon: Settings2 },
+      { name: "Connecting", status: "pending", icon: Database },
+      { name: "Reading", status: "pending", icon: Upload },
+      { name: "Parsing", status: "pending", icon: Code2 },
+      { name: "Cleaning", status: "pending", icon: Trash2 },
       { name: "Schemas", status: "pending", icon: Layers },
-      { name: "Enums", status: "pending", icon: Tags },
-      { name: "Sequences", status: "pending", icon: Hash },
       { name: "Tables", status: "pending", icon: Table },
-      { name: "Functions", status: "pending", icon: FunctionSquare },
+      { name: "Sequences", status: "pending", icon: Hash },
       { name: "Views", status: "pending", icon: Eye },
+      { name: "Functions", status: "pending", icon: FunctionSquare },
       { name: "Triggers", status: "pending", icon: Zap },
       { name: "Constraints", status: "pending", icon: Key },
+      { name: "Complete", status: "pending", icon: CheckCircle2 },
     ];
-
-    setProgress(steps);
-    setConsoleLogs([]);
-
-    const consoleMessages = [
-      {
-        icon: "🔌",
-        message: "Establishing connection to target database...",
-        type: "active" as const,
-      },
-      {
-        icon: "✓",
-        message: "Connected to database successfully",
-        type: "success" as const,
-      },
-      {
-        icon: "📄",
-        message: `Reading backup file: ${selectedBackup}...`,
-        type: "info" as const,
-      },
-      {
-        icon: "✓",
-        message: "Backup file loaded successfully",
-        type: "success" as const,
-      },
-      {
-        icon: "🔍",
-        message: "Parsing SQL statements...",
-        type: "info" as const,
-      },
-      ...(cleanDatabase
-        ? [
-            {
-              icon: "⚠",
-              message: "Cleaning existing database objects...",
-              type: "warning" as const,
-            },
-            {
-              icon: "🗑",
-              message: "Dropped existing tables and constraints",
-              type: "info" as const,
-            },
-          ]
-        : []),
-      { icon: "🔧", message: "Creating extensions...", type: "info" as const },
-      { icon: "📁", message: "Setting up schemas...", type: "info" as const },
-      { icon: "📋", message: "Creating enum types...", type: "info" as const },
-      { icon: "🔢", message: "Restoring sequences...", type: "info" as const },
-      {
-        icon: "📊",
-        message: "Creating tables and importing data...",
-        type: "active" as const,
-      },
-      {
-        icon: "📦",
-        message: "Restored table: users (1,247 rows)",
-        type: "info" as const,
-      },
-      {
-        icon: "📦",
-        message: "Restored table: accounts (892 rows)",
-        type: "info" as const,
-      },
-      {
-        icon: "⚡",
-        message: "Creating functions and procedures...",
-        type: "info" as const,
-      },
-      {
-        icon: "👁",
-        message: "Creating view definitions...",
-        type: "info" as const,
-      },
-      { icon: "🎯", message: "Setting up triggers...", type: "info" as const },
-      {
-        icon: "🔗",
-        message: "Applying foreign key constraints...",
-        type: "info" as const,
-      },
-      {
-        icon: "✓",
-        message: "All constraints applied successfully",
-        type: "success" as const,
-      },
-    ];
-
-    let currentStep = 0;
-    let messageIndex = 0;
-
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        setProgress((prev) =>
-          prev.map((step, idx) => {
-            if (idx < currentStep) return { ...step, status: "complete" };
-            if (idx === currentStep) return { ...step, status: "active" };
-            return step;
-          }),
-        );
-        setCurrentProgress(((currentStep + 1) / steps.length) * 100);
-        currentStep++;
-      }
-
-      if (messageIndex < consoleMessages.length) {
-        const msg = consoleMessages[messageIndex];
-        addConsoleLog(msg.type, msg.icon, msg.message);
-        messageIndex++;
-      }
-
-      if (
-        currentStep >= steps.length &&
-        messageIndex >= consoleMessages.length
-      ) {
-        clearInterval(interval);
-      }
-    }, 350);
-
-    return () => clearInterval(interval);
+    return steps;
   };
 
   const handleRestore = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
-    setProgress([]);
+    setProgress(initializeProgressSteps());
     setCurrentProgress(0);
-
-    const cleanup = simulateProgress();
+    setConsoleLogs([]);
+    setCurrentStatement("");
+    setStatementsExecuted(0);
+    setTotalStatements(0);
 
     try {
-      const response = await fetch("/api/restore", {
+      const response = await fetch("/api/restore-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           connectionString,
-          backupFilename: selectedBackup,
-          cleanDatabase,
+          backupFile: selectedBackup,
         }),
       });
 
-      const data = await response.json();
-      await new Promise((resolve) => setTimeout(resolve, 6500));
-
-      setResult(data);
-
-      if (data.success) {
-        addConsoleLog("success", "🎉", "Database restored successfully!");
-      } else {
-        addConsoleLog("error", "✗", `Restore failed: ${data.message}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (data.success && onRestoreComplete) {
-        onRestoreComplete();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6));
+
+              // Update progress bar
+              if (event.progress !== undefined) {
+                setCurrentProgress(event.progress);
+              }
+
+              // Update current statement and counts
+              if (event.currentStatement) {
+                setCurrentStatement(event.currentStatement);
+              }
+              if (event.statementsExecuted !== undefined) {
+                setStatementsExecuted(event.statementsExecuted);
+              }
+              if (event.totalStatements !== undefined) {
+                setTotalStatements(event.totalStatements);
+              }
+
+              // Update stage indicators
+              if (event.stage) {
+                updateProgressStep(event.stage, "active");
+                if (event.progress >= 95) {
+                  updateProgressStep(event.stage, "complete");
+                }
+              }
+
+              // Add console log
+              if (event.message) {
+                addConsoleLog(
+                  event.logType || "info",
+                  event.icon || "ℹ️",
+                  event.message
+                );
+              }
+
+              // Handle completion
+              if (event.type === "complete") {
+                setResult({ success: true, data: event.result, message: "Restore completed successfully!" });
+                addConsoleLog("success", "🎉", "Database restored successfully!");
+
+                // Trigger confetti celebration
+                confetti({
+                  particleCount: 100,
+                  spread: 70,
+                  origin: { y: 0.6 },
+                  colors: ['#10b981', '#14b8a6', '#06b6d4', '#3b82f6']
+                });
+
+                if (onRestoreComplete) {
+                  onRestoreComplete();
+                }
+              }
+
+              // Handle errors
+              if (event.type === "error") {
+                setResult({ success: false, message: event.message });
+                addConsoleLog("error", "✗", `Restore failed: ${event.message}`);
+              }
+            } catch (parseError) {
+              console.error("Failed to parse SSE event:", parseError);
+            }
+          }
+        }
       }
     } catch (error) {
       setResult({
@@ -281,7 +253,6 @@ export function RestoreTab({
       });
       addConsoleLog("error", "✗", "Restore operation failed");
     } finally {
-      cleanup();
       setLoading(false);
     }
   };
@@ -543,6 +514,33 @@ export function RestoreTab({
                 </motion.div>
               </div>
             </div>
+
+            {/* Current Statement Tracking */}
+            <AnimatePresence>
+              {totalStatements > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="glass-card rounded-xl p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Executing SQL statements: {statementsExecuted.toLocaleString()} / {totalStatements.toLocaleString()}
+                      </div>
+                      {currentStatement && (
+                        <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-mono truncate">
+                          {currentStatement}
+                        </div>
+                      )}
+                    </div>
+                    <RotateCcw className="w-4 h-4 text-cyan-500" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Console Output */}
             <div className="console-output">

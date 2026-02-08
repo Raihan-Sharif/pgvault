@@ -11,7 +11,7 @@ const zlib = require("zlib");
  * Serverless-compatible (no pg_restore required)
  */
 
-async function restoreBackup(connectionString, backupFilePath, options = {}) {
+async function restoreBackup(connectionString, backupFilePath, options = {}, progressCallback = null) {
   const {
     clean = false,
     dataOnly = false,
@@ -26,10 +26,22 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
     },
   });
 
+  // Helper to emit progress events
+  const emit = (event) => {
+    if (progressCallback) {
+      progressCallback(event);
+    } else {
+      // Fallback to console.log for CLI usage
+      if (event.message) {
+        console.log(`${event.icon || ''} ${event.message}`);
+      }
+    }
+  };
+
   try {
-    console.log("🔌 Connecting to database...");
+    emit({ type: 'log', stage: 'connecting', icon: '🔌', message: 'Connecting to database...', logType: 'info', progress: 0 });
     await client.connect();
-    console.log("✅ Connected successfully!");
+    emit({ type: 'log', stage: 'connecting', icon: '✅', message: 'Connected successfully!', logType: 'success', progress: 5 });
 
     // Check if backup file exists
     if (!fs.existsSync(backupFilePath)) {
@@ -37,20 +49,24 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
     }
 
     // Read backup file
-    console.log("📖 Reading backup file...");
+    emit({ type: 'log', stage: 'reading', icon: '📖', message: 'Reading backup file...', logType: 'info', progress: 10 });
     let sqlContent;
 
     if (backupFilePath.endsWith(".gz")) {
+      emit({ type: 'log', stage: 'reading', icon: '📦', message: 'Decompressing backup file...', logType: 'info', progress: 12 });
       const compressed = fs.readFileSync(backupFilePath);
       sqlContent = zlib.gunzipSync(compressed).toString("utf8");
     } else {
       sqlContent = fs.readFileSync(backupFilePath, "utf8");
     }
 
+    const fileSize = (sqlContent.length / 1024).toFixed(2);
+    emit({ type: 'log', stage: 'reading', icon: '✅', message: `File read: ${fileSize} KB`, logType: 'success', progress: 15 });
+
     // Parse SQL statements
-    console.log("🔍 Parsing SQL statements...");
+    emit({ type: 'log', stage: 'parsing', icon: '🔍', message: 'Parsing SQL statements...', logType: 'info', progress: 18 });
     const statements = parseSQLStatements(sqlContent);
-    console.log(`📊 Found ${statements.length} SQL statements`);
+    emit({ type: 'log', stage: 'parsing', icon: '📊', message: `Found ${statements.length} SQL statements`, logType: 'success', progress: 20 });
 
     // Filter statements based on options
     let filteredStatements = statements;
@@ -61,9 +77,7 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
           stmt.toUpperCase().trim().startsWith("INSERT") ||
           stmt.toUpperCase().trim().startsWith("COPY"),
       );
-      console.log(
-        `📊 Filtered to ${filteredStatements.length} data statements`,
-      );
+      emit({ type: 'log', stage: 'filtering', icon: '📊', message: `Filtered to ${filteredStatements.length} data statements`, logType: 'info', progress: 22 });
     }
 
     if (schemaOnly) {
@@ -72,9 +86,7 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
           !stmt.toUpperCase().trim().startsWith("INSERT") &&
           !stmt.toUpperCase().trim().startsWith("COPY"),
       );
-      console.log(
-        `📊 Filtered to ${filteredStatements.length} schema statements`,
-      );
+      emit({ type: 'log', stage: 'filtering', icon: '📊', message: `Filtered to ${filteredStatements.length} schema statements`, logType: 'info', progress: 22 });
     }
 
     if (selectedSchemas && selectedSchemas.length > 0) {
@@ -86,19 +98,17 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
             stmt.includes(`SCHEMA IF NOT EXISTS ${schema}`),
         );
       });
-      console.log(
-        `📊 Filtered to ${filteredStatements.length} statements for schemas: ${selectedSchemas.join(", ")}`,
-      );
+      emit({ type: 'log', stage: 'filtering', icon: '📊', message: `Filtered to ${filteredStatements.length} statements for schemas: ${selectedSchemas.join(", ")}`, logType: 'info', progress: 22 });
     }
 
     // Clean database if requested
     if (clean) {
-      console.log("🧹 Cleaning existing objects...");
-      await cleanDatabase(client, selectedSchemas);
+      emit({ type: 'log', stage: 'cleaning', icon: '🧹', message: 'Cleaning existing objects...', logType: 'info', progress: 25 });
+      await cleanDatabase(client, selectedSchemas, emit);
     }
 
     // Execute statements
-    console.log("⚡ Executing restore...");
+    emit({ type: 'log', stage: 'executing', icon: '⚡', message: 'Executing restore...', logType: 'info', progress: 30 });
     let successCount = 0;
     let errorCount = 0;
     const errors = [];
@@ -114,10 +124,22 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
         await client.query(stmt);
         successCount++;
 
-        if ((i + 1) % 100 === 0) {
-          console.log(
-            `  ⏳ Progress: ${i + 1}/${filteredStatements.length} statements executed`,
-          );
+        // Calculate progress (30% to 95% range)
+        const progress = 30 + Math.round(((i + 1) / filteredStatements.length) * 65);
+
+        if ((i + 1) % 50 === 0 || i === 0) {
+          const stmtPreview = stmt.substring(0, 80).replace(/\n/g, ' ');
+          emit({
+            type: 'log',
+            stage: 'executing',
+            icon: '⏳',
+            message: `Progress: ${i + 1}/${filteredStatements.length} statements executed`,
+            logType: 'info',
+            progress,
+            statementsExecuted: i + 1,
+            totalStatements: filteredStatements.length,
+            currentStatement: stmtPreview
+          });
         }
       } catch (error) {
         errorCount++;
@@ -126,41 +148,53 @@ async function restoreBackup(connectionString, backupFilePath, options = {}) {
           error: error.message,
         });
 
-        // Continue on error for most statements, but log them
-        if (errorCount <= 10) {
-          console.warn(`  ⚠️  Warning: ${error.message}`);
+        // Emit error in real-time
+        if (errorCount <= 5) {
+          emit({
+            type: 'log',
+            stage: 'executing',
+            icon: '⚠️',
+            message: `Warning: ${error.message}`,
+            logType: 'warning',
+            progress: 30 + Math.round(((i + 1) / filteredStatements.length) * 65)
+          });
         }
       }
     }
 
-    console.log(`\n✅ Restore completed!`);
-    console.log(`📊 Statistics:`);
-    console.log(`   - Successful: ${successCount} statements`);
-    console.log(`   - Errors: ${errorCount} statements`);
+    emit({ type: 'log', stage: 'complete', icon: '✅', message: 'Restore completed!', logType: 'success', progress: 98 });
+    emit({ type: 'log', stage: 'complete', icon: '📊', message: `Successful: ${successCount} statements`, logType: 'info', progress: 100 });
+    emit({ type: 'log', stage: 'complete', icon: '📊', message: `Errors: ${errorCount} statements`, logType: errorCount > 0 ? 'warning' : 'info', progress: 100 });
 
     if (errors.length > 0 && errors.length <= 10) {
-      console.log(`\n⚠️  Errors encountered:`);
+      emit({ type: 'log', stage: 'complete', icon: '⚠️', message: `${errors.length} error(s) encountered`, logType: 'warning', progress: 100 });
       errors.forEach((err, idx) => {
-        console.log(`   ${idx + 1}. ${err.error}`);
-        console.log(`      Statement: ${err.statement}`);
+        emit({ type: 'log', stage: 'complete', icon: '  -', message: `${err.error}`, logType: 'warning', progress: 100 });
       });
     } else if (errors.length > 10) {
-      console.log(
-        `\n⚠️  ${errors.length} errors encountered (showing first 10)`,
-      );
+      emit({ type: 'log', stage: 'complete', icon: '⚠️', message: `${errors.length} error(s) encountered (showing first 10)`, logType: 'warning', progress: 100 });
       errors.slice(0, 10).forEach((err, idx) => {
-        console.log(`   ${idx + 1}. ${err.error}`);
+        emit({ type: 'log', stage: 'complete', icon: '  -', message: `${err.error}`, logType: 'warning', progress: 100 });
       });
     }
 
-    return {
+    const result = {
       success: true,
       successCount,
       errorCount,
       errors: errors.slice(0, 10),
     };
+
+    emit({
+      type: 'complete',
+      stage: 'complete',
+      progress: 100,
+      result
+    });
+
+    return result;
   } catch (error) {
-    console.error("❌ Restore failed:", error.message);
+    emit({ type: 'error', stage: 'error', icon: '❌', message: `Restore failed: ${error.message}`, logType: 'error', progress: 0 });
     throw error;
   } finally {
     await client.end();
@@ -245,7 +279,7 @@ function parseSQLStatements(sqlContent) {
 /**
  * Clean database by dropping existing objects
  */
-async function cleanDatabase(client, selectedSchemas = null) {
+async function cleanDatabase(client, selectedSchemas = null, emit = null) {
   try {
     // Get schemas to clean
     const schemasQuery =
@@ -260,7 +294,11 @@ async function cleanDatabase(client, selectedSchemas = null) {
 
     for (const schemaRow of schemasResult.rows) {
       const schema = schemaRow.schema_name;
-      console.log(`  🧹 Cleaning schema: ${schema}`);
+      if (emit) {
+        emit({ type: 'log', stage: 'cleaning', icon: '🧹', message: `Cleaning schema: ${schema}`, logType: 'info', progress: 25 });
+      } else {
+        console.log(`  🧹 Cleaning schema: ${schema}`);
+      }
 
       // Drop all tables in schema
       const tablesResult = await client.query(
@@ -352,9 +390,17 @@ async function cleanDatabase(client, selectedSchemas = null) {
       }
     }
 
-    console.log("  ✅ Database cleaned");
+    if (emit) {
+      emit({ type: 'log', stage: 'cleaning', icon: '✅', message: 'Database cleaned', logType: 'success', progress: 28 });
+    } else {
+      console.log("  ✅ Database cleaned");
+    }
   } catch (error) {
-    console.warn(`  ⚠️  Error during cleanup: ${error.message}`);
+    if (emit) {
+      emit({ type: 'log', stage: 'cleaning', icon: '⚠️', message: `Error during cleanup: ${error.message}`, logType: 'warning', progress: 28 });
+    } else {
+      console.warn(`  ⚠️  Error during cleanup: ${error.message}`);
+    }
   }
 }
 

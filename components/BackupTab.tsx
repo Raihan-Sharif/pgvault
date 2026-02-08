@@ -24,6 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import * as React from "react";
+import confetti from "canvas-confetti";
 
 interface BackupTabProps {
   onBackupComplete?: (metadata: BackupMetadata) => void;
@@ -59,6 +60,8 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
   const [currentProgress, setCurrentProgress] = React.useState(0);
   const [elapsedTime, setElapsedTime] = React.useState(0);
   const [consoleLogs, setConsoleLogs] = React.useState<ConsoleLogEntry[]>([]);
+  const [currentTable, setCurrentTable] = React.useState<string>("");
+  const [rowsProcessed, setRowsProcessed] = React.useState<number>(0);
   const consoleEndRef = React.useRef<HTMLDivElement>(null);
   const logIdRef = React.useRef(0);
 
@@ -124,7 +127,22 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
     }
   };
 
-  const simulateProgress = () => {
+
+  const updateProgressStep = (stageName: string, status: "active" | "complete") => {
+    setProgress((prev) =>
+      prev.map((step) => {
+        const stepNameLower = step.name.toLowerCase();
+        const stageNameLower = stageName.toLowerCase();
+
+        if (stepNameLower.includes(stageNameLower) || stageNameLower.includes(stepNameLower)) {
+          return { ...step, status };
+        }
+        return step;
+      })
+    );
+  };
+
+  const initializeProgressSteps = () => {
     const steps: ProgressStep[] = [
       { name: "Connecting", status: "pending", icon: Database },
       { name: "Schemas", status: "pending", icon: Layers },
@@ -137,155 +155,23 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
       { name: "Triggers", status: "pending", icon: Zap },
       { name: "Constraints", status: "pending", icon: Key },
       { name: "Data", status: "pending", icon: FileCode },
-      { name: "Compressing", status: "pending", icon: Archive },
+      { name: "Writing", status: "pending", icon: Archive },
     ];
-
-    setProgress(steps);
-    setConsoleLogs([]);
-
-    const consoleMessages = [
-      {
-        icon: "🔌",
-        message: "Establishing secure connection to database...",
-        type: "active" as const,
-      },
-      {
-        icon: "✓",
-        message: "Connection established successfully",
-        type: "success" as const,
-      },
-      {
-        icon: "📊",
-        message: "Fetching schemas from database...",
-        type: "info" as const,
-      },
-      {
-        icon: "📦",
-        message: "Backing up schema: public",
-        type: "info" as const,
-      },
-      { icon: "🔧", message: "Exporting extensions...", type: "info" as const },
-      {
-        icon: "📋",
-        message: "Processing enum types...",
-        type: "info" as const,
-      },
-      {
-        icon: "🔢",
-        message: "Capturing sequence states...",
-        type: "info" as const,
-      },
-      {
-        icon: "📊",
-        message: "Fetching tables from schema: public...",
-        type: "active" as const,
-      },
-      {
-        icon: "📦",
-        message: "Backing up table: public._prisma_migrations...",
-        type: "info" as const,
-      },
-      {
-        icon: "📦",
-        message: "Backing up table: public.users...",
-        type: "info" as const,
-      },
-      {
-        icon: "📦",
-        message: "Backing up table: public.accounts...",
-        type: "info" as const,
-      },
-      {
-        icon: "👁",
-        message: "Processing view definitions...",
-        type: "info" as const,
-      },
-      {
-        icon: "⚡",
-        message: "Extracting function definitions...",
-        type: "info" as const,
-      },
-      {
-        icon: "🎯",
-        message: "Capturing trigger configurations...",
-        type: "info" as const,
-      },
-      {
-        icon: "🔗",
-        message: "Processing foreign key constraints...",
-        type: "info" as const,
-      },
-      {
-        icon: "💾",
-        message: "Streaming table data...",
-        type: "active" as const,
-      },
-      {
-        icon: "📊",
-        message: "Exported 1,247 rows from users table",
-        type: "info" as const,
-      },
-      {
-        icon: "📊",
-        message: "Exported 892 rows from accounts table",
-        type: "info" as const,
-      },
-      {
-        icon: "🗜",
-        message: "Compressing backup file with GZIP...",
-        type: "active" as const,
-      },
-      {
-        icon: "✓",
-        message: "Compression complete - 87% size reduction",
-        type: "success" as const,
-      },
-    ];
-
-    let currentStep = 0;
-    let messageIndex = 0;
-
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        setProgress((prev) =>
-          prev.map((step, idx) => {
-            if (idx < currentStep) return { ...step, status: "complete" };
-            if (idx === currentStep) return { ...step, status: "active" };
-            return step;
-          }),
-        );
-        setCurrentProgress(((currentStep + 1) / steps.length) * 100);
-        currentStep++;
-      }
-
-      if (messageIndex < consoleMessages.length) {
-        const msg = consoleMessages[messageIndex];
-        addConsoleLog(msg.type, msg.icon, msg.message);
-        messageIndex++;
-      }
-
-      if (
-        currentStep >= steps.length &&
-        messageIndex >= consoleMessages.length
-      ) {
-        clearInterval(interval);
-      }
-    }, 400);
-
-    return () => clearInterval(interval);
+    return steps;
   };
 
   const handleBackup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
-    setProgress([]);
+    setProgress(initializeProgressSteps());
     setCurrentProgress(0);
-
-    const cleanup = simulateProgress();
+    setConsoleLogs([]);
+    setCurrentTable("");
+    setRowsProcessed(0);
 
     try {
-      const response = await fetch("/api/backup", {
+      const response = await fetch("/api/backup-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -295,19 +181,87 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         }),
       });
 
-      const data = await response.json();
-      await new Promise((resolve) => setTimeout(resolve, 8000));
-
-      setResult(data);
-
-      if (data.success) {
-        addConsoleLog("success", "🎉", "Backup created successfully!");
-      } else {
-        addConsoleLog("error", "✗", `Backup failed: ${data.message}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (data.success && onBackupComplete && data.data?.metadata) {
-        onBackupComplete(data.data.metadata);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6));
+
+              // Update progress bar
+              if (event.progress !== undefined) {
+                setCurrentProgress(event.progress);
+              }
+
+              // Update current table and rows
+              if (event.currentTable) {
+                setCurrentTable(event.currentTable);
+              }
+              if (event.rowsProcessed !== undefined) {
+                setRowsProcessed(event.rowsProcessed);
+              }
+
+              // Update stage indicators
+              if (event.stage) {
+                updateProgressStep(event.stage, "active");
+                if (event.progress >= 95) {
+                  updateProgressStep(event.stage, "complete");
+                }
+              }
+
+              // Add console log
+              if (event.message) {
+                addConsoleLog(
+                  event.logType || "info",
+                  event.icon || "ℹ️",
+                  event.message
+                );
+              }
+
+              // Handle completion
+              if (event.type === "complete") {
+                setResult({ success: true, data: event.result, message: "Backup completed successfully!" });
+                addConsoleLog("success", "🎉", "Backup created successfully!");
+
+                // Trigger confetti celebration
+                confetti({
+                  particleCount: 100,
+                  spread: 70,
+                  origin: { y: 0.6 },
+                  colors: ['#6366f1', '#8b5cf6', '#d946ef', '#f97316']
+                });
+
+                if (onBackupComplete && event.result?.metadata) {
+                  onBackupComplete(event.result.metadata);
+                }
+              }
+
+              // Handle errors
+              if (event.type === "error") {
+                setResult({ success: false, message: event.message });
+                addConsoleLog("error", "✗", `Backup failed: ${event.message}`);
+              }
+            } catch (parseError) {
+              console.error("Failed to parse SSE event:", parseError);
+            }
+          }
+        }
       }
     } catch (error) {
       setResult({
@@ -316,7 +270,6 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
       });
       addConsoleLog("error", "✗", "Backup operation failed");
     } finally {
-      cleanup();
       setLoading(false);
     }
   };
@@ -579,6 +532,33 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
                 </motion.div>
               </div>
             </div>
+
+            {/* Current Table Tracking */}
+            <AnimatePresence>
+              {currentTable && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="glass-card rounded-xl p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Processing: {currentTable}
+                      </div>
+                      {rowsProcessed > 0 && (
+                        <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                          {rowsProcessed.toLocaleString()} rows processed
+                        </div>
+                      )}
+                    </div>
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Console Output */}
             <div className="console-output">

@@ -11,7 +11,7 @@ const zlib = require("zlib");
  * Serverless-compatible (no pg_dump required)
  */
 
-async function createBackup(connectionString, backupName, options = {}) {
+async function createBackup(connectionString, backupName, options = {}, progressCallback = null) {
   const {
     compress = false,
     schemasOnly = null,
@@ -26,12 +26,34 @@ async function createBackup(connectionString, backupName, options = {}) {
     },
   });
 
+  // Helper to emit progress events
+  const emit = (event) => {
+    if (progressCallback) {
+      progressCallback(event);
+    } else {
+      // Fallback to console.log for CLI usage
+      if (event.message) {
+        console.log(`${event.icon || ''} ${event.message}`);
+      }
+    }
+  };
+
+  // Progress tracking
+  let totalSteps = 0;
+  let completedSteps = 0;
+
+  const updateProgress = () => {
+    const progress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+    return progress;
+  };
+
   try {
-    console.log("🔌 Connecting to database...");
+    emit({ type: 'log', stage: 'connecting', icon: '🔌', message: 'Connecting to database...', logType: 'info', progress: 0 });
     await client.connect();
-    console.log("✅ Connected successfully!");
+    emit({ type: 'log', stage: 'connecting', icon: '✅', message: 'Connected successfully!', logType: 'success', progress: 5 });
 
     // Get database info
+    emit({ type: 'log', stage: 'info', icon: 'ℹ️', message: 'Fetching database information...', logType: 'info', progress: 10 });
     const dbInfo = await client.query("SELECT current_database(), version()");
     const databaseName = dbInfo.rows[0].current_database;
     const postgresVersion = dbInfo.rows[0].version;
@@ -48,6 +70,8 @@ async function createBackup(connectionString, backupName, options = {}) {
       backupDir,
       `${backupName}_${timestamp}.json`,
     );
+
+    emit({ type: 'log', stage: 'info', icon: '📊', message: `Database: ${databaseName}`, logType: 'info', progress: 12 });
 
     let writeStream;
     let sqlContent = "";
@@ -72,11 +96,11 @@ async function createBackup(connectionString, backupName, options = {}) {
     write(`SET client_min_messages = warning;\n\n`);
 
     // Get all schemas (excluding system schemas)
-    console.log("📋 Fetching schemas...");
+    emit({ type: 'log', stage: 'schemas', icon: '📋', message: 'Fetching schemas...', logType: 'info', progress: 15 });
     const schemasResult = await client.query(
       `
-      SELECT schema_name 
-      FROM information_schema.schemata 
+      SELECT schema_name
+      FROM information_schema.schemata
       WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_temp_1', 'pg_toast_temp_1')
       ${schemasOnly ? `AND schema_name = ANY($1)` : ""}
       ORDER BY schema_name;
@@ -85,6 +109,8 @@ async function createBackup(connectionString, backupName, options = {}) {
     );
 
     const schemas = schemasResult.rows.map((r) => r.schema_name);
+    emit({ type: 'log', stage: 'schemas', icon: '✅', message: `Found ${schemas.length} schema(s): ${schemas.join(', ')}`, logType: 'success', progress: 18 });
+
     const objectCounts = {
       tables: 0,
       views: 0,
@@ -97,7 +123,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
     // Backup extensions
     if (!dataOnly) {
-      console.log("🔌 Backing up extensions...");
+      emit({ type: 'log', stage: 'extensions', icon: '🔌', message: 'Backing up extensions...', logType: 'info', progress: 20 });
       const extensionsResult = await client.query(`
         SELECT extname, extversion
         FROM pg_extension
@@ -112,6 +138,7 @@ async function createBackup(connectionString, backupName, options = {}) {
             `CREATE EXTENSION IF NOT EXISTS "${ext.extname}" WITH SCHEMA public VERSION '${ext.extversion}';\n`,
           );
           objectCounts.extensions++;
+          emit({ type: 'log', stage: 'extensions', icon: '✅', message: `Extension: ${ext.extname} v${ext.extversion}`, logType: 'info', progress: 20 + objectCounts.extensions });
         }
         write(`\n`);
       }
@@ -119,7 +146,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
     // Backup enums and custom types
     if (!dataOnly) {
-      console.log("🏷️  Backing up enums and custom types...");
+      emit({ type: 'log', stage: 'enums', icon: '🏷️', message: 'Backing up enums and custom types...', logType: 'info', progress: 25 });
       for (const schema of schemas) {
         const enumsResult = await client.query(
           `
@@ -151,10 +178,24 @@ async function createBackup(connectionString, backupName, options = {}) {
             );
             write(`\n);\n\n`);
             objectCounts.enums++;
+            emit({ type: 'log', stage: 'enums', icon: '✅', message: `Enum: ${schema}.${typname}`, logType: 'info', progress: 25 });
           }
         }
       }
     }
+
+    // Count total tables for progress calculation
+    let totalTables = 0;
+    let processedTables = 0;
+    for (const schema of schemas) {
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`,
+        [schema]
+      );
+      totalTables += parseInt(countResult.rows[0].count);
+    }
+
+    emit({ type: 'log', stage: 'tables', icon: '📊', message: `Found ${totalTables} table(s) to backup`, logType: 'info', progress: 30 });
 
     for (const schema of schemas) {
       write(`\n-- ============================================\n`);
@@ -164,7 +205,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
       // Backup sequences
       if (!dataOnly) {
-        console.log(`🔢 Backing up sequences from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'sequences', icon: '🔢', message: `Backing up sequences from schema: ${schema}...`, logType: 'info', progress: 30 });
         const sequencesResult = await client.query(
           `
           SELECT sequence_name
@@ -200,7 +241,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
       // Backup views
       if (!dataOnly) {
-        console.log(`👁️  Backing up views from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'views', icon: '👁️', message: `Backing up views from schema: ${schema}...`, logType: 'info', progress: 35 });
         const viewsResult = await client.query(
           `
           SELECT table_name, view_definition
@@ -224,7 +265,7 @@ async function createBackup(connectionString, backupName, options = {}) {
       }
 
       // Get all tables in this schema
-      console.log(`📊 Fetching tables from schema: ${schema}...`);
+      emit({ type: 'log', stage: 'tables', icon: '📊', message: `Fetching tables from schema: ${schema}...`, logType: 'info', progress: 40 });
       const tablesResult = await client.query(
         `
         SELECT table_name 
@@ -239,7 +280,18 @@ async function createBackup(connectionString, backupName, options = {}) {
         const table = tableRow.table_name;
         const fullTableName = `${schema}.${table}`;
 
-        console.log(`  📦 Backing up table: ${fullTableName}...`);
+        // Calculate progress based on tables processed
+        const tableProgress = 40 + Math.round((processedTables / totalTables) * 40);
+        emit({
+          type: 'log',
+          stage: 'tables',
+          icon: '📦',
+          message: `Backing up table: ${fullTableName}...`,
+          logType: 'info',
+          progress: tableProgress,
+          currentTable: fullTableName,
+          metadata: { tablesProcessed: processedTables, totalTables }
+        });
 
         if (!dataOnly) {
           // Get table structure
@@ -369,6 +421,16 @@ async function createBackup(connectionString, backupName, options = {}) {
 
           if (rowCount > 0) {
             write(`-- Data for ${fullTableName} (${rowCount} rows)\n`);
+            emit({
+              type: 'log',
+              stage: 'data',
+              icon: '💾',
+              message: `Exporting ${rowCount} row(s) from ${fullTableName}`,
+              logType: 'info',
+              progress: tableProgress,
+              currentTable: fullTableName,
+              rowsProcessed: rowCount
+            });
 
             const dataResult = await client.query(
               `SELECT * FROM ${fullTableName}`,
@@ -398,11 +460,22 @@ async function createBackup(connectionString, backupName, options = {}) {
             write("\n");
           }
         }
+
+        processedTables++;
+        emit({
+          type: 'log',
+          stage: 'tables',
+          icon: '✅',
+          message: `Completed table: ${fullTableName}`,
+          logType: 'success',
+          progress: 40 + Math.round((processedTables / totalTables) * 40),
+          currentTable: fullTableName
+        });
       }
 
       // Backup indexes (excluding primary key indexes)
       if (!dataOnly) {
-        console.log(`🔍 Backing up indexes from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'indexes', icon: '🔍', message: `Backing up indexes from schema: ${schema}...`, logType: 'info', progress: 80 });
         const indexesResult = await client.query(
           `
           SELECT indexname, indexdef
@@ -425,7 +498,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
       // Backup foreign keys
       if (!dataOnly) {
-        console.log(`🔗 Backing up foreign keys from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'foreignkeys', icon: '🔗', message: `Backing up foreign keys from schema: ${schema}...`, logType: 'info', progress: 85 });
         const fkResult = await client.query(
           `
           SELECT
@@ -455,7 +528,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
       // Backup functions and procedures
       if (!dataOnly) {
-        console.log(`⚙️  Backing up functions from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'functions', icon: '⚙️', message: `Backing up functions from schema: ${schema}...`, logType: 'info', progress: 88 });
         const functionsResult = await client.query(
           `
           SELECT
@@ -481,7 +554,7 @@ async function createBackup(connectionString, backupName, options = {}) {
 
       // Backup triggers
       if (!dataOnly) {
-        console.log(`⚡ Backing up triggers from schema: ${schema}...`);
+        emit({ type: 'log', stage: 'triggers', icon: '⚡', message: `Backing up triggers from schema: ${schema}...`, logType: 'info', progress: 90 });
         const triggersResult = await client.query(
           `
           SELECT
@@ -508,6 +581,7 @@ async function createBackup(connectionString, backupName, options = {}) {
     }
 
     // Write the final SQL content to file
+    emit({ type: 'log', stage: 'writing', icon: '💾', message: compress ? 'Compressing and writing backup file...' : 'Writing backup file...', logType: 'info', progress: 92 });
     if (compress) {
       const compressed = zlib.gzipSync(sqlContent);
       fs.writeFileSync(filepath, compressed);
@@ -516,6 +590,7 @@ async function createBackup(connectionString, backupName, options = {}) {
     }
 
     const fileSize = fs.statSync(filepath).size;
+    emit({ type: 'log', stage: 'writing', icon: '✅', message: `File written: ${(fileSize / 1024).toFixed(2)} KB`, logType: 'success', progress: 95 });
 
     // Create metadata file
     const metadata = {
@@ -530,23 +605,23 @@ async function createBackup(connectionString, backupName, options = {}) {
     };
 
     fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    emit({ type: 'log', stage: 'metadata', icon: '📋', message: 'Metadata file created', logType: 'success', progress: 98 });
 
-    console.log(`\n✅ Backup completed successfully!`);
-    console.log(`📁 File saved to: ${filepath}`);
-    console.log(`📊 Size: ${(fileSize / 1024).toFixed(2)} KB`);
-    console.log(`📋 Metadata: ${metadataPath}`);
-    console.log(`\n📈 Backup Statistics:`);
-    console.log(`   - Tables: ${objectCounts.tables}`);
-    console.log(`   - Views: ${objectCounts.views}`);
-    console.log(`   - Sequences: ${objectCounts.sequences}`);
-    console.log(`   - Functions: ${objectCounts.functions}`);
-    console.log(`   - Triggers: ${objectCounts.triggers}`);
-    console.log(`   - Enums: ${objectCounts.enums}`);
-    console.log(`   - Extensions: ${objectCounts.extensions}`);
+    emit({ type: 'log', stage: 'complete', icon: '✅', message: `Backup completed successfully!`, logType: 'success', progress: 100 });
+    emit({ type: 'log', stage: 'complete', icon: '📁', message: `File: ${filename}`, logType: 'info', progress: 100 });
+    emit({ type: 'log', stage: 'complete', icon: '📊', message: `Size: ${(fileSize / 1024).toFixed(2)} KB`, logType: 'info', progress: 100 });
+    emit({ type: 'log', stage: 'complete', icon: '📈', message: `Tables: ${objectCounts.tables} | Views: ${objectCounts.views} | Functions: ${objectCounts.functions}`, logType: 'info', progress: 100 });
+
+    emit({
+      type: 'complete',
+      stage: 'complete',
+      progress: 100,
+      result: { filepath, metadata, filename, fileSize, objectCounts }
+    });
 
     return { filepath, metadata };
   } catch (error) {
-    console.error("❌ Backup failed:", error.message);
+    emit({ type: 'error', stage: 'error', icon: '❌', message: `Backup failed: ${error.message}`, logType: 'error', progress: 0 });
     throw error;
   } finally {
     await client.end();
