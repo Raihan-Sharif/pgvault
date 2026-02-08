@@ -201,7 +201,7 @@ export function BackupTab({ onBackupComplete }: BackupTabProps) {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        addConsoleLog("success", "⬇️", t.restore.downloading + " " + filename); // reusing downloading string
+        addConsoleLog("success", "⬇️", t.backup.downloading + " " + filename); // reusing downloading string
         setResult({ success: true, message: "Download started successfully." });
 
     } catch (e: any) {
